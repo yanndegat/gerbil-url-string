@@ -23,6 +23,7 @@
         path/param-path
         path/param-param
 
+        url-error url-error?
         string->url
         string->url*
         url->string)
