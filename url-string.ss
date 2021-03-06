@@ -34,31 +34,59 @@
 ;; having at least one ":" distinguishes from other address forms:
 ;;
 ;; "^[0-9a-fA-F:]*:[0-9a-fA-F:]*$"
-(def rx-ipv6-hex (regexp '(+ bos (* (or alnum ":")) ":" (* (or alnum ":")) eos)))
+(def rx-ipv6-pattern '(+ (* (or alnum ":")) ":" (* (or alnum ":"))))
+(def rx-ipv6 (regexp `(+ bos ,rx-ipv6-pattern eos)))
 
 ;; scheme parsing regexp
 ;; "^[a-zA-Z][a-zA-Z0-9+.-]*$"
-(def rx-scheme (regexp '(+ bos alpha (* (or alnum ("+.-"))) eos)))
+(def rx-scheme-pattern '(+ alpha (* (or alnum ("+.-")))))
+(def rx-scheme (regexp `(+ bos ,rx-scheme-pattern eos)))
+
+(def rx-user-pattern '(+ alpha (* (or alnum ("+.-")))))
+(def rx-user (regexp `(+ bos ,rx-user-pattern eos)))
+
+(def rx-host-pattern '(+ (or alnum ("+.-"))))
+(def rx-host (regexp `(+ bos ,rx-host-pattern eos)))
+
+(def rx-port-pattern '(+ num))
+(def rx-path-pattern '(* (~ ("?#"))))
+(def rx-query-pattern '(* (~ ("#"))))
+
+(def rx-fragment-pattern '(* any))
+(def rx-fragment (regexp `(+ bos ,rx-fragment-pattern eos)))
 
 ;; URL parsing regexp
 ;; this is roughly following the regexp in Appendix B of rfc 3986, except for using
 ;; `*' instead of `+' for the scheme part (it is checked later anyway, and
 ;; we don't want to parse it as a path element), and the user@host:port is
 ;; parsed here.
+;; (define rx-url
+;;   (regexp '(+ bos
+;;             (?? ($ (* (~ (":/?#")))) ":")                 ; 1- scheme opt
+;;             (?? "//"                                      ; slash-slash authority opt
+;;                 (?? ($ (* (~ ("/?#@")))) "@")             ; 2- user@ opt
+;;                 (?? (or                                   ;
+;;                       (?? "[" ($ (* (or alnum ":"))       ; 3- ipv6 host opt
+;;                                  ":"                      ;
+;;                                  (* (or alnum ":"))) "]") ;
+;;                       (?? ($ (* (~ ("/?#:")))))))         ; 4- host opt
+;;                 (?? ":" ($ (* num))))                     ; 5- :port opt
+;;             ($ (* (~ ("?#"))))                            ; 6- path
+;;             (?? "?" ($ (* (~ ("#")))))                    ; 7- query
+;;             (?? "#" ($ (* any)))                          ; 8- fragment
+;;             eos)))
 (define rx-url
-  (regexp '(+ bos
-            (?? ($ (* (~ (":/?#")))) ":")                 ; 1- scheme opt
-            (?? "//"                                      ; slash-slash authority opt
-                (?? ($ (* (~ ("/?#@")))) "@")             ; 2- user@ opt
+  (regexp `(+ bos
+            (?? ($ ,rx-scheme-pattern) ":")               ; 1- scheme opt
+            (?? "//"                                      ;
+                (?? ($ ,rx-user-pattern) "@")             ; 2- user@ opt
                 (?? (or                                   ;
-                      (?? "[" ($ (* (or alnum ":"))       ; 3- ipv6 host opt
-                                 ":"                      ;
-                                 (* (or alnum ":"))) "]") ;
-                      (?? ($ (* (~ ("/?#:")))))))         ; 4- host opt
-                (?? ":" ($ (* num))))                     ; 5- :port opt
-            ($ (* (~ ("?#"))))                            ; 6- path
-            (?? "?" ($ (* (~ ("#")))))                    ; 7- query
-            (?? "#" ($ (* any)))                          ; 8- fragment
+                      (?? "[" ($ ,rx-ipv6-pattern) "]")   ; 3- ipv6 host
+                      (?? ($ ,rx-host-pattern))))         ; 4- host opt
+                (?? ":" ($ ,rx-port-pattern)))            ; 5- :port opt
+            ($ ,rx-path-pattern)                          ; 6- path
+            (?? "?" ($ ,rx-query-pattern))                ; 7- query
+            (?? "#" ($ ,rx-fragment-pattern))             ; 8- fragment
             eos)))
 
 (defstruct url (scheme         ;; (or/c false/c string?)
@@ -69,7 +97,55 @@
                 path           ;; (listof path/param?)
                 query          ;; (listof (cons/c symbol? (or/c string? false/c)))
                 fragment       ;; (or/c false/c string?)
-                ))
+                )
+  constructor: :url-init!
+  final: #t)
+
+(defmethod {:url-init! url}
+  (lambda (self scheme user host port path-absolute? path query fragment)
+    (unless (or (not scheme) (and (string? scheme)
+                                  (regexp-matches? rx-scheme scheme)))
+      (raise-url-error "not a valid url scheme" scheme))
+
+    (unless (or (not user) (and (string? user)
+                                (regexp-matches? rx-user user)))
+      (raise-url-error "not a valid url user" user))
+
+    (unless (or (not host) (and (string? host)
+                                (regexp-matches? rx-host host)))
+      (raise-url-error "not a valid url host" host))
+
+    (unless (or (not port) (and (number? port)
+                                (< 0 port)
+                                (< port 65535)))
+      (raise-url-error "not a valid url port" port))
+
+    (unless (boolean? path-absolute?)
+      (raise-url-error "not a valid url path-absolute?" path-absolute?))
+
+    (unless (or (not path) (and (list? path)
+                                (foldl (lambda (a b)
+                                         (and (path/param? a) b))
+                                       #t
+                                       path)))
+      (raise-url-error "not a valid url path" path))
+
+    (unless (or (not query) (and (list? query)
+                                 (foldl (lambda (a b)
+                                          (and b
+                                               (pair? a)
+                                               (symbol? (car a))
+                                               (string? (cdr a))))
+                                        #t
+                                        query)))
+      (raise-url-error "not a valid url query" query))
+
+    (unless (or (not fragment) (and (string? fragment)
+                                    (regexp-matches? rx-fragment fragment)))
+      (raise-url-error "not a valid url fragment" fragment))
+
+    (struct-instance-init! self
+                           scheme user host port path-absolute? path query fragment)))
 
 (defstruct path/param (path    ;; (or/c string? (symbols 'up 'same))
                        param   ;; (listof string?)])
@@ -77,8 +153,8 @@
 
 (defstruct (url-error <error>) ())
 
-(def (raise-url-error where what . irritants)
-  (raise (make-url-error what irritants where)))
+(def (raise-url-error msg . irritants)
+  (raise (make-url-error msg irritants #f)))
 
 ;; Like `string->url`, but returns #f for an error, intended for use
 ;; with pattern matching.
@@ -100,8 +176,7 @@
          (x-path (regexp-match-submatch url 6))
          (x-query (regexp-match-submatch url 7))
          (x-fragment (regexp-match-submatch url 8)))
-
-    (when (and x-scheme (not (regexp-matches? rx-scheme x-scheme)))
+   (when (and x-scheme (not (regexp-matches? rx-scheme x-scheme)))
       (raise-url-error "invalid URL string; bad scheme\n  scheme: ~e\n  in: ~e" x-scheme str))
     (let* ((scheme   (and x-scheme (string-downcase x-scheme)))
            (host     (cond (x-ipv6host (and x-ipv6host (string-downcase x-ipv6host)))
@@ -152,7 +227,7 @@
                  [ "//"
                    (if (not user) "" [(uri-encode user) "@"])
                    (if (not host) ""
-                     (if (regexp-matches? rx-ipv6-hex host)
+                     (if (regexp-matches? rx-ipv6 host)
                        [ "[" host "]"]
                        host))
                    (if (not port) "" [":" (number->string port)])]
@@ -162,7 +237,6 @@
                (combine-path-strings (url-path-absolute? url) path)
                (if (not query) "" [ "?" (alist->form-urlencoded query)])
                (if (not fragment) "" [ "#" (uri-encode fragment)])]))))
-
 
 (define (separate-params s)
   (let ((lst (map path-segment-decode (regexp-split ";" s))))
@@ -185,7 +259,6 @@
           (if value (string-append name "=" value) name))
         args)
    (if (memq (current-alist-separator-mode) ['semi 'semi-or-amp]) ";" "&")))
-
 
 (def (form-urlencoded->alist str)
   (def rx-keyval (regexp '(+ bos ($ (+ alnum)) "=" ($ (* any)) eos)))
