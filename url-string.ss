@@ -49,10 +49,10 @@
 (def rx-host (regexp `(+ bos ,rx-host-pattern eos)))
 
 (def rx-port-pattern '(+ num))
-(def rx-path-pattern '(* (~ ("?#"))))
-(def rx-query-pattern '(* (~ ("#"))))
+(def rx-path-pattern '(* (~ ("?# "))))
+(def rx-query-pattern '(* (~ ("# "))))
 
-(def rx-fragment-pattern '(* any))
+(def rx-fragment-pattern '(* (~ (" "))))
 (def rx-fragment (regexp `(+ bos ,rx-fragment-pattern eos)))
 
 ;; URL parsing regexp
@@ -60,21 +60,6 @@
 ;; `*' instead of `+' for the scheme part (it is checked later anyway, and
 ;; we don't want to parse it as a path element), and the user@host:port is
 ;; parsed here.
-;; (define rx-url
-;;   (regexp '(+ bos
-;;             (?? ($ (* (~ (":/?#")))) ":")                 ; 1- scheme opt
-;;             (?? "//"                                      ; slash-slash authority opt
-;;                 (?? ($ (* (~ ("/?#@")))) "@")             ; 2- user@ opt
-;;                 (?? (or                                   ;
-;;                       (?? "[" ($ (* (or alnum ":"))       ; 3- ipv6 host opt
-;;                                  ":"                      ;
-;;                                  (* (or alnum ":"))) "]") ;
-;;                       (?? ($ (* (~ ("/?#:")))))))         ; 4- host opt
-;;                 (?? ":" ($ (* num))))                     ; 5- :port opt
-;;             ($ (* (~ ("?#"))))                            ; 6- path
-;;             (?? "?" ($ (* (~ ("#")))))                    ; 7- query
-;;             (?? "#" ($ (* any)))                          ; 8- fragment
-;;             eos)))
 (define rx-url
   (regexp `(+ bos
             (?? ($ ,rx-scheme-pattern) ":")               ; 1- scheme opt
