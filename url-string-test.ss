@@ -67,16 +67,11 @@
       )
 
     (test-case "test string->url"
-      (def urlhttp2 (string->url (url->string urlhttp1)))
-      (def urlssh2 (string->url (url->string urlssh1)))
-      (def urlssh3 (string->url (url->string urlssh1)))
-      (def urlssh4 (string->url (url->string urlssh1)))
-      (def urlssh5 (string->url (url->string urlssh1)))
-      (def urlssh6 (string->url (url->string urlssh1)))
-      (def urlssh7 (string->url (url->string urlssh1)))
-      (def urlssh8 (string->url (url->string urlssh1)))
-      (def urlssh9 (string->url (url->string urlssh1)))
+      (def urlhttp1str (url->string urlhttp1))
+      (def urlhttp2 (string->url urlhttp1str))
 
+      (def urlssh1str (url->string urlssh1))
+      (def urlssh2 (string->url urlssh1str))
 
       (check-equal? (url-scheme urlhttp2) "https")
       (check-equal? (url-host urlhttp2) "host.com")
@@ -89,4 +84,4 @@
       )
     ))
 
-(run-tests! url-string-test)
+(unless (run-tests! url-string-test) (exit 1))
