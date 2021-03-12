@@ -19,9 +19,21 @@
         url-query
         url-fragment
 
+        url-scheme-set!
+        url-user-set!
+        url-host-set!
+        url-port-set!
+        url-path-absolute?-set!
+        url-path-set!
+        url-query-set!
+        url-fragment-set!
+
         path/param path/param? make-path/param
         path/param-path
         path/param-param
+
+        path/param-path-set!
+        path/param-param-set!
 
         url-error url-error?
         string->url
