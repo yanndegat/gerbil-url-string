@@ -35,6 +35,7 @@
         path/param-path-set!
         path/param-param-set!
 
+        alist->form-urlencoded
         url-error url-error?
         string->url
         string->url*
